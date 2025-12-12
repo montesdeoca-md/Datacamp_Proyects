@@ -1,0 +1,9 @@
+*.DS_Store
+
+*.log
+
+**/.Rhistory
+
+*.csv
+
+Examen_Practico.pdf

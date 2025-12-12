@@ -1,0 +1,549 @@
+---
+title: "Product Sales Project"
+author: "Rodrigo Conrado Cortés Montes de Oca"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Introduction
+
+A new line of office stationery were launched 6 weeks ago. In focus to optimize the sales and revenues for our company three sales strategies were implemented: Email, Call and Email + Call. In this report we analyze the effectiviness of these strategies and insights which may be the best strategy in the future.
+
+The following report is divided in:
+
+-   Data Validation and cleaning process of the dataset.
+
+-   Exploratory Analysis of the different variables, their differences and their relationships.
+
+-   Definition of a metric for our buissnes to monitor and assess the efectiviness in the future.
+
+-   Final summary and recomendations
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo = FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE, echo = FALSE}
+# Libraries used in this report
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+if (!require("ggsignif")) install.packages("ggsignif")
+library(ggsignif)
+if (!require("car")) install.packages("car")
+library(car)
+if (!require("scales")) install.packages("scales")
+library(scales)
+# Data used in this report
+data <- read_csv("product_sales.csv")
+```
+
+```{r include=FALSE}
+#First visualization of the data
+str(data)
+```
+
+# Data Validation
+
+The data recieved consist in 8 variables with 15,000 observation or registers. The variables are the following:
+
+-   **week**: Week sale was made, counted as weeks since product launch, stored as a integer, but acts as a category nominal level. From 1 to 6. No empty values were identified in this column. No modifications were necessary
+
+-   **sales_method**: This column is stored as a caracter, so an adjustment was employed to store as a factor with three nominal categories: "Email", "Call", "Email + Call". In the validation process were identified some misspeled words such as "em + call" and "email", so an unification were employed to fit this categories in their correct factor. No empty values were identified in this column. A total of 3 groups and 15,000 regisers in total were confirmed.
+
+-   **customer_id**: This is unique for each customer. No duplicates or missing values were identified. No changes were necessary.
+
+-   **nb_sold**: Number of units sold. The number of products needs to be a integer. No double (continuous) numbers or empty values were identified. No changes were necessary in this column.
+
+-   **revenue**: Revenue from the sales, rounded to 2 decimal places. 1074 empty values were identified as NA, and replaced with the mean of the non-na values. No other changes on this column were necessary.
+
+-   **year_as_customer**: Number of years that a customer has been buying from our stores. As the maximum value coherent in this case is 41 (accordingly with the foundation year 1984), two abnormal outliers were identified and replaced with the maximum value possible 41. No missing values were identified and no other changes were necessary.
+
+-   **nb_site_visits**: The number of visits in our website in the last 6 months that a customer has made. No missing values were identified and no changes where necessary.
+
+-   **state**: States of the United States as a full name. This column is stored as a caracter, so an adjustment was employed to store as a factor with 50 different countries identified.
+
+```{r}
+# Data Validation: Used data_val (as data_validated)
+data_val <- data %>%
+  mutate(
+    sales_method = case_when(
+      sales_method == "em + call" ~ "Email + Call",
+      sales_method == "email"    ~ "Email",
+      TRUE ~ sales_method
+    ) %>%
+    factor(levels = c("Email", "Call", "Email + Call")), 
+    state = factor(state),
+    revenue = replace_na(revenue, mean(revenue, na.rm = TRUE)) 
+  ) %>%
+  mutate(years_as_customer = ifelse(years_as_customer > 41, 41, years_as_customer)) 
+
+summary(data_val)
+```
+
+```{r}
+# Confirmation of data validation
+
+# Confirmation of the three cathegories in sales_method
+table(data_val$sales_method)
+paste0("The total of customers is ", sum(table(data_val$sales_method)))
+paste0("The total of groups are ", nlevels(data_val$sales_method))
+
+# Confirmation of 15,000 different values and no duplicated data in customer_id 
+paste0("The total of individual customers is ", nlevels(as.factor(data_val$customer_id)))
+paste0("The total of duplicates is ", sum(duplicated(data_val$customer_id)))
+
+# Confirmation of 50 different states in the registration in state
+data_val$state <- as.factor(data_val$state)
+paste0("The total of states is ",nlevels(data_val$state))
+```
+
+```{r}
+# Summary table of the nummerical categories
+data_val %>%
+  group_by(sales_method) %>%
+  summarize(
+    'Number of customers' = n(), 
+    'Mean Revenue' = mean(revenue), 
+    'Median Revenue' = median(revenue), 
+    'SD of Revenue' = sd(revenue)) %>% 
+  rename('Sales Method' = sales_method) %>% 
+  mutate(across(where(is.numeric), ~round(.x, 2))) %>%  # Redondear para legibilidad
+  kable(format = "latex", booktabs = TRUE, caption = "Summary table of revenue") %>%
+  kable_styling(latex_options = c("striped", "hold_position", scale_down = TRUE))
+
+
+data_val %>%
+  group_by(sales_method) %>%
+  summarize(
+    'N. of customers' = n(), 
+    'Mean of  products sold' = mean(nb_sold), 
+    'Median of products sold' = median(nb_sold),
+    'SD of number of products sold' = sd(nb_sold)) %>%
+  rename('Sales Method' = sales_method) %>% 
+  mutate(across(where(is.numeric), ~round(.x, 2))) %>%  # Redondear para legibilidad
+  kable(format = "latex", booktabs = TRUE, caption = "Summary table of number of new products sold") %>%
+  kable_styling(latex_options = c("striped", "hold_position", scale_down = TRUE, float_position = "H"))
+
+data_val %>%
+  group_by(sales_method) %>%
+  summarize(
+     'Number of customers' = n(), 
+     'Mean of years' = mean(years_as_customer), 
+		 'Median of years' = median(years_as_customer), 
+		 'SD of years' = sd(years_as_customer)) %>%
+  rename('Sales Method' = sales_method) %>% 
+  mutate(across(where(is.numeric), ~round(.x, 2))) %>%  # Redondear para legibilidad
+  kable(format = "latex", booktabs = TRUE, caption = "Summary table of years as a customer") %>%
+  kable_styling(latex_options = c("striped", "hold_position", scale_down = TRUE, float_position = "H"))
+
+data_val %>%
+  group_by(sales_method) %>%
+  summarize(
+     'Number of customers' = n(), 
+     'Mean of visits' = mean(nb_site_visits), 
+		 'Median of visits' = median(nb_site_visits), 
+		 'SD of visits' = sd(nb_site_visits)) %>% 
+  mutate(across(where(is.numeric), ~round(.x, 2))) %>%  # Redondear para legibilidad
+  kable(format = "latex", booktabs = TRUE, caption = "Summary table of number of website visits") %>%
+  kable_styling(latex_options = c("striped", "hold_position", scale_down = TRUE, float_position = "H"))
+
+
+
+```
+
+# 1. Number of Customers for each Sales Method
+
+A total of 15,000 customers were included in the analysis, these customers were assigned into one of the three sales strategies. The method with most customers was "Email" with 7,466 customers, followed by "Call" with 4962 customers and lastly "Email + Call" with 2572 customers.
+
+```{r}
+# Data manipulation and graph to obtain the number of customers per method
+count <- data_val %>%
+  count(sales_method) %>%
+  mutate(n_formatted = comma(n))
+
+ggplot(count, aes(x = sales_method, y = n, fill = sales_method)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  geom_text(aes(label = n_formatted), vjust = -0.5, size = 4) +
+  labs(title = "Number of customers for each method", x = "Sales Method", y = "Customers") +
+  scale_y_continuous(labels = label_comma()) +
+  theme(legend.position = "none", axis.text.x = element_text(size = 12), axis.title = element_text(size = 15), title = element_text(size = 18))
+```
+
+# 2. Spread of Revenue
+
+## 2.1. Overal Spread of Revenue
+
+The overall revenue indicates that most of the customers generated a revenue of 100 USD, while the overall revenue is skewed to the left indicates that the customers generated a revenue of less 100 USD, and some minority generated a revenue of a maximum of approximate 240 USD.
+
+```{r, warning=FALSE, message=FALSE}
+# Histogram of the overall revenue spread
+ggplot(data_val, aes(x = revenue)) + 
+geom_histogram(color = "black") + 
+labs(title = "Overall Revenue Distribution", x = "Frecuency", y = "Revenue") +
+  scale_y_continuous(labels = label_comma()) +
+theme(axis.text.x = element_text( size = 12), axis.title = element_text(size = 15), title = element_text(size = 18))
+```
+
+## 2.2 Spread of revenue for each sales method
+
+To evaluate the spread of revenue for each method, a boxplot was created. To evaluate if the overall revenue grouped by each strategy a statistical test was used. To confirm the election for the statistical test a QQ plot and Levene test was employed, defining the election for Kruskal Wallis test, denoting that there is statistical difference between the customer revenue by each group and between all of them.
+
+This means, the customers in the Email + Call group tended to generated more revenue, followed by the Email group, and lastly the customers in the Call group.
+
+```{r}
+# Assumption analysis
+data_val %>%
+ggplot(aes(sample = revenue)) +
+  stat_qq(aes(color = sales_method)) +
+  stat_qq_line() +
+  labs(title = "QQ-plot for revenue") + 
+  facet_wrap(~sales_method) + 
+  theme(axis.text.x = element_text( size = 12), axis.title = element_text(size = 15), title = element_text(size = 18), legend.position = "none")
+
+leveneTest(revenue ~ sales_method, data = data_val)
+```
+
+```{r}
+# Revenue by Sales Method with significance symbols
+
+# Comparasions list 
+comparisons <- list(
+  c("Email", "Email + Call"),
+  c("Call", "Email"),
+  c("Email + Call", "Call"))
+
+#Kruskal Wallis test
+kw_revenue <- kruskal.test(revenue ~ sales_method, data = data_val)
+kw_revenue
+
+#Wilcoxon posthoc test with Bonferroni p-adjustment
+posthoc_revenue <- pairwise.wilcox.test(x = data_val$revenue,
+                g = data_val$sales_method,
+                p.adjust.method = "bonferroni")
+posthoc_revenue
+
+#Position of statistical symbols
+max_rev <- max(data_val$revenue, na.rm = TRUE)
+y_positions <- seq(from = max_rev * 1.05,
+                   by   = max_rev * 0.05,
+                   length.out = length(comparisons))
+
+#Conditioning for statistical symbols
+pvals <- na.omit(as.vector(posthoc_revenue$p.value))
+annotations <- ifelse(pvals < 0.001, "***",
+               ifelse(pvals < 0.01, "**",
+               ifelse(pvals < 0.05, "*", "ns")))
+
+#Boxplot of revenue by sales methods 
+ggplot(data_val, aes(x = sales_method, y = revenue, fill = sales_method)) +
+  geom_boxplot() +
+  geom_signif(comparisons = comparisons,
+              annotations = annotations,
+              y_position = y_positions,
+              tip_length = 0.01) + 
+ labs(title = "Revenue by Sales Methods", x = "Different Sales Methods", y = "Revenue") + 
+theme(legend.title = element_blank(), legend.position = "none", axis.text.x = element_text( size = 12), axis.title = element_text(size = 15), title = element_text(size = 18))
+```
+
+# 3. Differences in Revenue over Time for each sale strategy
+
+The total revenue of the six weeks were \$1,409,024.14. Of this total, 51.34% were generated by the Email group, followed by the Email + Call group with 31.31% and lastly the Call group with 17.35%. Then I realize an analyze of the revenue into the six weeks. The findings are crucial to define which stratehy was more successful: - The Email method in the first week generated the highest revenue, with 84% of the revenue of that week. This indicate that at first week this method is the more efficient, but, after that, the Email method decreased substanciantly and in the sixth week the revenue was 1/10 of the first. - The Call method were constant and practically unifform with a discreate increasing just as the end of the fifth week, at sixth week the revenue decreased. This indicate that this method is constant the revenue is minnimal and over time tends to decrease. - The Email + Call Method started as the lowest revenue at the first week with just 6.2% of the first week revenue. However the tendency were a substancial increase in the revenue with a maximum point at the fifth week with 6.5 times the revenue of the first week of this method. At the last week the revenue presented a discrete decrease.
+
+This analysis deluced that the Email + Call method is the most promising method as it takes 1/3 of the time call, and just more work for the email. The email method starts with the highest revenue, but declines just as the second week ends. And the Call method is constant but with no significant revenue. Posterior analysis are generated to clarify the most efficient method.
+
+```{r}
+#Total revenue in weeks by sales method
+data_val %>%
+  group_by(week, sales_method) %>%
+  summarize(revenue = sum(revenue), .groups = "drop") %>%
+  ggplot(aes(x = week, y = revenue, color = sales_method)) +
+  geom_line(size = 1.5) + 
+  scale_y_continuous(labels = label_comma()) +
+  labs(title = "Total Revenue Over Time", subtitle = "Grouped by Sales Methods", x = "Week", y = "Revenue", color = "Sales Method") + 
+  scale_x_continuous(breaks = c(1:6)) +
+  theme(plot.title = element_text(size = 18), legend.position = c(0.98, 0.98), legend.justification = c(1, 1),legend.title = element_text(size = 14), legend.text  = element_text(size = 12), axis.text.x = element_text( size = 12), axis.title = element_text(size = 15)) 
+```
+
+```{r}
+#Revenue over time and proportion
+revenue_time <- data_val %>% 
+  group_by(week, sales_method) %>%
+  summarize(sum = sum(revenue), .groups = "drop") %>% 
+  pivot_wider(names_from = sales_method, values_from = sum) %>%
+  mutate(Total = rowSums(select(., -week)))
+
+revenue_total <- revenue_time %>%
+summarize(week = NA,
+	     Email = sum(Email), 
+		 Call = sum(Call), 
+		 `Email + Call` = sum(`Email + Call`), 
+		 Total = sum(Total)) %>%
+mutate(across(where(is.numeric), ~round(.x, 2))) 
+revenue_summ <- bind_rows(revenue_time, revenue_total)
+
+revenue_summ_prop <- revenue_summ %>%
+  mutate(across(c(Email, Call, `Email + Call`), ~ .x / Total)) %>%
+  mutate(Email = Email * 100, 
+		 Call = Call * 100, 
+		 `Email + Call` = `Email + Call` * 100,
+		 Total = 100) 
+```
+
+```{r}
+# Tabla 1: Revenue absoluto
+
+revenue_summ_fmt <- revenue_summ %>%
+  mutate(across(where(is.numeric), ~ scales::comma(.x, accuracy = 1))) %>%
+  mutate(week = replace(week, n(), "Total"))
+
+kable(revenue_summ_fmt, format = "latex", booktabs = TRUE, caption = "Revenue over weeks") %>%
+  kable_styling(latex_options = c("striped", "hold_position"))
+
+revenue_summ_prop_table <- revenue_summ_prop %>% 
+  mutate(week = replace(week, n(), "Total"))
+
+# Tabla 2: Proporciones de revenue
+kable(revenue_summ_prop_table, format = "latex", booktabs = TRUE, caption = "Proportion of revenue over weeks") %>%
+  kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r}
+revenue_summ %>%
+  filter(!is.na(week)) %>% 
+  pivot_longer(cols = c(Call, Email, `Email + Call`), names_to = "sales_method", values_to = "revenue") %>%
+  mutate(sales_method = factor(sales_method, levels = c("Email", "Call", "Email + Call"))) %>%
+  ggplot(aes(x = week, y = revenue, fill = sales_method)) +
+  geom_bar(stat = "identity") +
+  scale_y_discrete(labels = label_comma()) +
+  labs(title = "Revenue by week", y = "Revenue", x = "Week") +
+  scale_x_discrete(breaks = c(1:6)) +
+  theme(axis.text.x = element_text( size = 12), axis.title = element_text(size = 15), plot.title = element_text(size = 18))
+
+revenue_summ_prop %>%
+  filter(!is.na(week)) %>%
+  pivot_longer(cols = c(Email, Call, `Email + Call`), names_to = "sales_method", values_to = "percentage") %>%
+  mutate(sales_method = factor(sales_method, levels = c("Email", "Call", "Email + Call"))) %>%
+  ggplot(aes(x = week, y = percentage, fill = sales_method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Proportion of Revenue by Sales Method", y = "Proportion (%)", x = "Week") +
+  scale_x_continuous(breaks = c(1:6)) + 
+  theme(axis.text.x = element_text( size = 12), axis.title = element_text(size = 15), plot.title = element_text(size = 18))
+```
+
+```{r}
+# Mean revenue over time by sales method 
+data_val %>%
+  group_by(sales_method, week) %>%
+  summarize(revenue_mean = mean(revenue, na.rm = TRUE)) %>%
+  ggplot(aes(x = week, y = revenue_mean, color = sales_method)) +
+  geom_line(size = 1.5) + 
+  labs(title = "Mean Revenue Over Weeks", subtitle = "Grouped by Sales Methods", x = "Week", y = "Mean Revenue", color = "Sales Method") + 
+  scale_x_continuous(breaks = c(1:6)) +
+  theme(plot.title = element_text(size = 18), legend.position = c(0.02, 0.98), legend.justification = c(0, 1),legend.title = element_text(size = 14), legend.text  = element_text(size = 12), axis.text.x = element_text( size = 12), axis.title = element_text(size = 15)) 
+```
+
+# 4. Ohter Differences between customers of each group
+
+Then I compared three variables more to assess if there are differences between the groups. In all the cases assumption test were employed to evaluate the more accurate statistic test, in all cases the most appropiate was Kruskal Wallis test.
+
+1.  The number of units sold by each method was statistically different between all of them. The Email + Call method generated the major number of products sold with a mean of of 12.23, at second place the Email method and the last place were the Call method with a mean of 9.73 and 9.51 respectively. This suggest that the customers contacted by Email + Call are more likely to buy more products per customer.
+2.  The years as a customer per methot were statistically different between Call method vs Email and Email + Call, but comparing Email vs Email + Call resulted in non-statistical significance. This information suggest that the differences in other variables comparing Email vs Email + Call are not related with the number of years as a customer.
+3.  Then, I compared the number of visits to our website in the last 6 months, and identified that the Email + Call method again was the one with highest visits. Suggesting that this method not just only increases the number of products sold by customer also increases the number of visits in our website.
+
+With this information we can conclude that the method Email + Call could be the most efficient of the three metrics considering all the variables evaluated.
+
+```{r}
+#Statistical asummptions
+data_val %>%
+ggplot(aes(sample = nb_sold)) +
+  stat_qq(aes(color = sales_method)) +
+  stat_qq_line() +
+  labs(title = "QQ-plot for number of units sold") + 
+  facet_wrap(~sales_method) + 
+  theme(axis.text.x = element_text( size = 12), axis.title = element_text(size = 15), title = element_text(size = 18), legend.position = "none")
+
+leveneTest(nb_sold ~ sales_method, data = data_val)
+```
+
+```{r}
+# nb_sold statistical test and graphing
+kw_sold <- kruskal.test(nb_sold~sales_method, data = data_val)
+kw_sold
+posthoc_sold <- pairwise.wilcox.test(x = data_val$nb_sold,
+                g = data_val$sales_method,
+                p.adjust.method = "bonferroni")
+posthoc_sold
+
+max_sold <- max(data_val$nb_sold, na.rm = TRUE)
+y_positions_sold <- seq(from = max_sold * 1.05,
+                   by   = max_sold * 0.05,
+                   length.out = length(comparisons))
+
+pvals_sold <- na.omit(as.vector(posthoc_sold$p.value))
+annotations_sold <- ifelse(pvals_sold < 0.001, "***",
+               ifelse(pvals_sold < 0.01, "**",
+               ifelse(pvals_sold < 0.05, "*", "ns")))
+
+ggplot(data_val, aes(x = sales_method, y = nb_sold, fill = sales_method)) +
+  geom_boxplot() +
+  geom_signif(comparisons = comparisons,
+              annotations = annotations_sold,
+              y_position = y_positions_sold,
+              tip_length = 0.01) + 
+labs(title = "Number of New Products Sold", subtitle = "Grouped by sales method", x = NULL, y = "Number of products sold") +
+theme(legend.position = "none", plot.title = element_text(size = 18), plot.subtitle = element_text(size =  10),  axis.text.x = element_text( size = 12), axis.title = element_text(size = 15))
+```
+
+```{r}
+#Statistical asummptions
+data_val %>%
+ggplot(aes(sample = years_as_customer)) +
+  stat_qq(aes(color = sales_method)) +
+  stat_qq_line() +
+  labs(title = "QQ-plot for years as a customer") + 
+  facet_wrap(~sales_method) + 
+  theme(axis.text.x = element_text( size = 12), axis.title = element_text(size = 15), title = element_text(size = 18), legend.position = "none")
+
+leveneTest(years_as_customer ~ sales_method, data = data_val)
+```
+
+```{r}
+# years_as_customer statistical test and graphing
+kw_years <- kruskal.test(years_as_customer~sales_method, data = data_val)
+kw_years
+posthoc_years <- pairwise.wilcox.test(x = data_val$years_as_customer,
+                g = data_val$sales_method,
+                p.adjust.method = "bonferroni")
+posthoc_years
+
+max_years <- max(data_val$years_as_customer, na.rm = TRUE)
+y_positions_years <- seq(from = max_years * 1.05,
+                   by   = max_years * 0.05,
+                   length.out = length(comparisons))
+
+pvals_years <- na.omit(as.vector(posthoc_years$p.value))
+annotations_years <- ifelse(pvals_years < 0.001, "***",
+               ifelse(pvals_years < 0.01, "**",
+               ifelse(pvals_years < 0.05, "*", "ns")))
+
+ggplot(data_val, aes(x = sales_method, y = years_as_customer, fill = sales_method)) +
+  geom_boxplot() +
+  geom_signif(comparisons = comparisons,
+              annotations = annotations_years,
+              y_position = y_positions_years,
+              tip_length = 0.01) + 
+labs(title = "Years as customer", subtitle = "Grouped by sales method", x = NULL, y = "Years as customer") +
+theme(legend.position = "none", plot.title = element_text(size = 18), plot.subtitle = element_text(size =  10),  axis.text.x = element_text( size = 12), axis.title = element_text(size = 15))
+```
+
+```{r}
+# Statistical assumptions
+data_val %>%
+ggplot(aes(sample = nb_site_visits)) +
+  stat_qq(aes(color = sales_method)) +
+  stat_qq_line() +
+  labs(title = "QQ-plot for revenue") + 
+  facet_wrap(~sales_method) + 
+  theme(axis.text.x = element_text( size = 12), axis.title = element_text(size = 15), title = element_text(size = 18), legend.position = "none")
+
+leveneTest(nb_site_visits ~ sales_method, data = data_val)
+```
+
+```{r}
+# nb_site_visits statistical test and graphing
+
+kw_site <- kruskal.test(nb_site_visits~sales_method, data = data_val)
+kw_site
+posthoc_site <- pairwise.wilcox.test(x = data_val$nb_site_visits,
+                g = data_val$sales_method,
+                p.adjust.method = "bonferroni")
+posthoc_site
+
+max_site <- max(data_val$nb_site_visits, na.rm = TRUE)
+y_positions_site <- seq(from = max_site * 1.05,
+                   by   = max_site * 0.05,
+                   length.out = length(comparisons))
+
+pvals_site <- na.omit(as.vector(posthoc_site$p.value))
+annotations_site <- ifelse(pvals_site < 0.001, "***",
+               ifelse(pvals_site < 0.01, "**",
+               ifelse(pvals_site < 0.05, "*", "ns")))
+
+ggplot(data_val, aes(x = sales_method, y = nb_site_visits, fill = sales_method)) +
+  geom_boxplot() +
+  geom_signif(comparisons = comparisons,
+              annotations = annotations_site,
+              y_position = y_positions_site,
+              tip_length = 0.01) + 
+labs(title = "Number of visits our website", subtitle = "Grouped by sales method, in the last 6 months", x = NULL, y = "Number of visits") +
+theme(legend.position = "none", plot.title = element_text(size = 18), plot.subtitle = element_text(size =  10),  axis.text.x = element_text( size = 12), axis.title = element_text(size = 15))
+```
+
+# Buissnes Metric: Adjusted Mean Revenue considering time and effort invested
+
+Defining a buissnes metric that can be measurable by the team will help to follow-up the tendency of the revenue registered in this 6-week period strategy. So I defined a metric called "Adjusted Mean Revenue" (AMR) which consist in the mean revenue per customer, but adjusting this value by a difficult factor, this were determined by time consumed by the team depending on the strategy (5 for Email, 30 for Call and 10 for Email + Call). In this case the metrics were substancially different between the three groups. The AMR for the 6 week period were 16.093 with a standard deviation of 2.858.
+
+Considering this value as a baseline the main objective to monitor in the future will be mantain this value with a range of two times the standard deviation, this means this tendency will be considered if the AMR weekly is between 10.377 and 21.809. I suggest to implement this value as a metric to confirm the effectiviness of the Email + Call method, considering that the Email method in the first week of the strategy was by far the most effective in terms of revenue.
+
+```{r, message = TRUE}
+diff_fac <- tibble(
+  sales_method = c("Email", "Call", "Email + Call"),
+  D = c(5, 30, 10))
+
+adj_rev <- data_val %>%
+  left_join(diff_fac, by = "sales_method") %>%
+  group_by(week, sales_method) %>%
+  summarise(adjusted_mean = mean(revenue) / first(D),
+			.groups = "drop") %>%
+  select(week, sales_method, adjusted_mean) %>%
+  pivot_wider(names_from = sales_method, values_from = adjusted_mean)
+
+adj_rev_tot <- data_val %>%
+  left_join(diff_fac, by = "sales_method") %>%
+  group_by(sales_method) %>%
+  summarise(adjusted_mean =  mean(revenue) / first(D),
+			.groups = "drop") %>%
+  select(sales_method, adjusted_mean) %>%
+  pivot_wider(names_from = sales_method, values_from = adjusted_mean)
+
+amr <- bind_rows(adj_rev, adj_rev_tot) %>% 
+  mutate(week = replace(week, n(), "Total"))
+
+amr
+
+kable(amr, format = "latex", booktabs = TRUE, caption = "Adjusted Mean Revenue Over Time") %>%
+  kable_styling(latex_options = c("striped", "hold_position", scale_down = TRUE, float_position = "H"))
+```
+
+```{r}
+adj_rev_mean <- data_val %>%
+  left_join(diff_fac, by = "sales_method") %>%
+  group_by(week, sales_method) %>%
+  summarise(adjusted_mean =  mean(revenue) / first(D),
+			.groups = "drop") %>%
+  select(week, sales_method, adjusted_mean) %>%
+ filter(sales_method == 'Email + Call') %>%
+ summarize('Mean' = mean(adjusted_mean), 
+		  'Standard Deviation' = sd(adjusted_mean))
+adj_rev
+
+kable(adj_rev_mean, format = "latex", booktabs = TRUE, caption = "Adjusted Mean Revenue for Email + Call") %>%
+  kable_styling(latex_options = c("striped", "hold_position", scale_down = TRUE, float_position = "H"))
+```
+
+# Conclusions and Recommendations
+
+As a final summary:
+
+-   The Email + Call method were the most stable with a healthy increase over the weeks.
+
+-   The Email method generated the highest revenue just in the first week, and then it were decreasing over the time.
+
+-   The Call method is the weakest of the three with the lowest revenue generated and the more time consuming versus the other methods.
+
+-   The Adjusted Mean Revenue is a metric that can help the effectiviness of method implemented over time with a baseline of 16.093.

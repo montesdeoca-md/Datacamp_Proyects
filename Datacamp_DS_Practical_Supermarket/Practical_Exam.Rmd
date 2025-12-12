@@ -1,0 +1,115 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(tidyverse) 
+
+data <- read_csv("Datacamp_Supermarket/loyalty.csv")
+
+clean_data <- data %>%
+	mutate(
+		first_month = ifelse(first_month == ".", 0, first_month),
+		region = factor(region, levels = c('Americas', 'Asia/Pacific', 'Europe', 'Middle East/Africa')),
+		loyalty_years = factor(loyalty_years, order = TRUE, levels = c('0-1', '1-3', '3-5', '5-10', '10+')),
+		joining_month = ifelse(is.na(joining_month) , "Unknown", joining_month),
+		promotion = case_when(promotion == "YES" ~ "Yes", 
+							  promotion == "NO" ~ "No", 
+							 TRUE ~ promotion)
+	) %>%
+	mutate(
+		first_month = as.numeric(first_month),
+		joining_month = factor(joining_month, levels = c("Jan", "Feb", 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Unknown')), 
+		promotion = factor(promotion, levels = c("No", "Yes"))
+	)
+clean_data
+
+summary(clean_data)
+levels(clean_data$joining_month)
+```
+
+# Task 2
+The team at International Essentials have told you that they have always believed that the number of years in the loyalty scheme is the biggest driver of spend.
+
+Producing a table showing the difference in the average spend by number of years in the loyalty programme along with the variance to investigate this question for the team.
+
+You should start with the data in the file 'loyalty.csv'.
+Your output should be a data frame named spend_by_years.
+It should include the three columns loyalty_years, avg_spend, var_spend.
+Your answers should be rounded to 2 decimal places.
+
+
+```{r}
+spend_by_years <- data %>%
+  group_by(loyalty_years) %>% 
+  summarize(
+    avg_spend = round(mean(spend),2), 
+    var_spend = round(var(spend),2)
+  ) %>% 
+  select(loyalty_years, avg_spend, var_spend) 
+
+spend_by_years
+```
+Task 3
+Fit a baseline model to predict the spend over the year for each customer.
+
+Fit your model using the data contained in “train.csv”
+
+Use “test.csv” to predict new values based on your model. You must return a dataframe named base_result, that includes customer_id and spend. The spend column must be your predicted 
+
+```{r}
+train <- read_csv("Datacamp_Supermarket/train.csv") %>% 
+  mutate(
+    loyalty_years = factor(loyalty_years, order = TRUE, levels = c('0-1', '1-3', '3-5', '5-10', '10+')))
+    
+
+model <- lm(spend~loyalty_years * first_month + items_in_first_month + joining_month, data = train)
+summary(model)
+
+test <- read_csv("Datacamp_Supermarket/test.csv") 
+
+
+base_result <- test %>% 
+  select(customer_id) %>% 
+  mutate(spend = seq(1:n()))
+
+base_result$spend <- predict(model, newdata = test)
+
+
+
+# rmse <- round(sqrt(mean((train$spend - base_result$spend)^2)),3)
+# 
+# # Mostrar el resultado
+# print(rmse)
+
+```
+
+
+Task 4
+Fit a comparison model to predict the spend over the year for each customer.
+
+Fit your model using the data contained in “train.csv”
+
+Use “test.csv” to predict new values based on your model. You must return a dataframe named compare_result, that includes customer_id and spend. The spend column must be your predicted values.
+
+```{r}
+library(randomForest)
+loyalty_levels <- c("0-1", "1-3", "3-5", "5-10", "10+")
+train <- train %>%
+  mutate(loyalty_encoded = as.numeric(factor(loyalty_years, levels = loyalty_levels, ordered = TRUE)))
+
+test <- test %>%
+  mutate(loyalty_encoded = as.numeric(factor(loyalty_years, levels = loyalty_levels, ordered = TRUE)))
+
+
+features <- c("loyalty_encoded", "first_month", "items_in_first_month", "joining_month")
+
+rf_model <- randomForest(x = train[, features], y = train$spend, ntree = 100)
+
+predicted_spend <- predict(rf_model, newdata = test[, features])
+
+compare_result <- test %>%
+  select(customer_id) %>%
+  mutate(spend = predicted_spend)
+```
+
